@@ -1,0 +1,540 @@
+//+------------------------------------------------------------------+
+//| XAUUSD MDP EA v30.0 - ANTI LOSS EDITION                      |
+//| Fokus: Konsisten $100/hari dengan perlindungan maksimal       |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, MDP Trader"
+#property version   "30.00"
+#property description "EA dengan sistem anti-revenge trading"
+
+#include <Trade\Trade.mqh>
+
+//+------------------------------------------------------------------+
+//| ANTI-REVENGE TRADING SYSTEM                                    |
+//+------------------------------------------------------------------+
+input group "=== DAILY TARGET & PROTECTION ==="
+input double DailyProfitTarget = 100.0;    // Target profit harian ($)
+input double DailyLossLimit = 50.0;        // Batas loss harian ($)
+input double MaxRiskPerTrade = 1.5;        // Risk per trade (%)
+input int MaxConsecutiveLosses = 3;        // Max loss berturut-turut
+input int CooldownAfterLoss = 60;          // Cooldown setelah loss (menit)
+
+input group "=== POSITION SIZING ==="
+input double FixedLotSize = 0.01;          // Fixed lot size (anti-martingale)
+input double MaxLotSize = 0.03;            // Maksimal lot size
+input bool UseFixedSize = true;            // Gunakan fixed size (RECOMMENDED)
+
+input group "=== SMART ENTRY SYSTEM ==="
+input int FastMA = 8;                      // Fast MA
+input int SlowMA = 21;                     // Slow MA
+input int RSI_Period = 14;                 // RSI period
+input int ATR_Period = 14;                 // ATR period
+input double MinATRFilter = 15.0;          // Min ATR dalam points
+
+input group "=== RISK MANAGEMENT ==="
+input double StopLossPoints = 300;         // SL dalam points (30 pips)
+input double TakeProfitPoints = 600;       // TP dalam points (60 pips)
+input bool UseTrailingStop = true;        // Trailing stop
+input double TrailingDistance = 200;      // Trailing distance (points)
+
+input group "=== TIME & MARKET FILTERS ==="
+input bool AvoidHighImpactNews = true;    // Hindari news high impact
+input int StartHour = 8;                  // Mulai trading (GMT+7)
+input int EndHour = 20;                   // Akhir trading (GMT+7)
+input double MaxSpreadPoints = 150;       // Max spread (points)
+
+//--- Global Variables
+CTrade trade;
+datetime LastTradeTime = 0;
+datetime DayStartTime = 0;
+double DailyProfit = 0;
+double DailyLoss = 0;
+int ConsecutiveLosses = 0;
+bool DailyTargetReached = false;
+bool DailyLossLimitHit = false;
+string TradingSymbol = "";
+
+// Indicators
+int handle_FastMA, handle_SlowMA, handle_RSI, handle_ATR;
+double FastMA_Buffer[], SlowMA_Buffer[], RSI_Buffer[], ATR_Buffer[];
+
+//+------------------------------------------------------------------+
+//| Expert initialization                                           |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    Print("========================================");
+    Print("🎯 MDP EA v30.0 - ANTI LOSS EDITION");
+    Print("💰 Target: $", DailyProfitTarget, "/hari");
+    Print("🛡️ Max Loss: $", DailyLossLimit, "/hari");
+    Print("========================================");
+    
+    TradingSymbol = Symbol();
+    
+    // Setup trading object
+    trade.SetExpertMagicNumber(20250624);
+    trade.SetDeviationInPoints(20);
+    trade.SetAsyncMode(false);
+    
+    // Initialize indicators
+    handle_FastMA = iMA(TradingSymbol, PERIOD_CURRENT, FastMA, 0, MODE_EMA, PRICE_CLOSE);
+    handle_SlowMA = iMA(TradingSymbol, PERIOD_CURRENT, SlowMA, 0, MODE_EMA, PRICE_CLOSE);
+    handle_RSI = iRSI(TradingSymbol, PERIOD_CURRENT, RSI_Period, PRICE_CLOSE);
+    handle_ATR = iATR(TradingSymbol, PERIOD_CURRENT, ATR_Period);
+    
+    if(handle_FastMA == INVALID_HANDLE || handle_SlowMA == INVALID_HANDLE || 
+       handle_RSI == INVALID_HANDLE || handle_ATR == INVALID_HANDLE)
+    {
+        Print("❌ Gagal inisialisasi indikator!");
+        return(INIT_FAILED);
+    }
+    
+    // Array setup
+    ArraySetAsSeries(FastMA_Buffer, true);
+    ArraySetAsSeries(SlowMA_Buffer, true);
+    ArraySetAsSeries(RSI_Buffer, true);
+    ArraySetAsSeries(ATR_Buffer, true);
+    
+    ResetDailyStats();
+    
+    Print("✅ SISTEM ANTI-LOSS AKTIF!");
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| ANTI-REVENGE TRADING CHECK                                     |
+//+------------------------------------------------------------------+
+bool AntiRevengeCheck()
+{
+    // Cek daily target sudah tercapai
+    if(DailyTargetReached)
+    {
+        Print("🎉 Daily target $", DailyProfitTarget, " sudah tercapai! Stop trading.");
+        return false;
+    }
+    
+    // Cek daily loss limit
+    if(DailyLossLimitHit)
+    {
+        Print("🛑 Daily loss limit $", DailyLossLimit, " tercapai! Stop trading.");
+        return false;
+    }
+    
+    // Cek consecutive losses
+    if(ConsecutiveLosses >= MaxConsecutiveLosses)
+    {
+        Print("❌ Terlalu banyak loss berturut-turut: ", ConsecutiveLosses);
+        Print("💡 Cooldown mode aktif. Evaluasi strategi dulu!");
+        return false;
+    }
+    
+    // Cooldown setelah loss
+    if(ConsecutiveLosses > 0 && (TimeCurrent() - LastTradeTime) < CooldownAfterLoss * 60)
+    {
+        static datetime lastCooldownMsg = 0;
+        if(TimeCurrent() - lastCooldownMsg > 300) // Log tiap 5 menit
+        {
+            int remainingTime = (int)((CooldownAfterLoss * 60) - (TimeCurrent() - LastTradeTime)) / 60;
+            Print("⏳ Cooldown aktif. Sisa: ", remainingTime, " menit");
+            lastCooldownMsg = TimeCurrent();
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| CALCULATE SAFE POSITION SIZE                                   |
+//+------------------------------------------------------------------+
+double CalculateSafePositionSize()
+{
+    if(UseFixedSize) return FixedLotSize;
+    
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+    double riskAmount = balance * MaxRiskPerTrade / 100;
+    
+    // Calculate lot size berdasarkan SL
+    double tickValue = SymbolInfoDouble(TradingSymbol, SYMBOL_TRADE_TICK_VALUE);
+    double lotSize = riskAmount / (StopLossPoints * tickValue / 10);
+    
+    // Normalize
+    double minLot = SymbolInfoDouble(TradingSymbol, SYMBOL_VOLUME_MIN);
+    double maxLot = SymbolInfoDouble(TradingSymbol, SYMBOL_VOLUME_MAX);
+    double lotStep = SymbolInfoDouble(TradingSymbol, SYMBOL_VOLUME_STEP);
+    
+    if(lotStep > 0)
+        lotSize = MathRound(lotSize / lotStep) * lotStep;
+    
+    lotSize = MathMax(minLot, MathMin(maxLot, lotSize));
+    lotSize = MathMin(lotSize, MaxLotSize);
+    
+    return NormalizeDouble(lotSize, 2);
+}
+
+//+------------------------------------------------------------------+
+//| SMART SIGNAL SYSTEM                                            |
+//+------------------------------------------------------------------+
+int GetSmartSignal()
+{
+    // Copy indikator data
+    if(CopyBuffer(handle_FastMA, 0, 0, 3, FastMA_Buffer) != 3 ||
+       CopyBuffer(handle_SlowMA, 0, 0, 3, SlowMA_Buffer) != 3 ||
+       CopyBuffer(handle_RSI, 0, 0, 3, RSI_Buffer) != 3 ||
+       CopyBuffer(handle_ATR, 0, 0, 3, ATR_Buffer) != 3)
+        return 0;
+    
+    // Current values
+    double fast_ma = FastMA_Buffer[0];
+    double slow_ma = SlowMA_Buffer[0];
+    double fast_ma_prev = FastMA_Buffer[1];
+    double slow_ma_prev = SlowMA_Buffer[1];
+    double rsi = RSI_Buffer[0];
+    double atr = ATR_Buffer[0];
+    
+    // ATR filter - hindari market yang terlalu sepi
+    if(atr * MathPow(10, Digits()) < MinATRFilter)
+    {
+        static datetime lastATRMsg = 0;
+        if(TimeCurrent() - lastATRMsg > 1800) // Log tiap 30 menit
+        {
+            Print("📉 ATR terlalu rendah: ", DoubleToString(atr * MathPow(10, Digits()), 1), " points");
+            lastATRMsg = TimeCurrent();
+        }
+        return 0;
+    }
+    
+    // Signal logic - sederhana tapi efektif
+    bool ma_bullish = fast_ma > slow_ma;
+    bool ma_bearish = fast_ma < slow_ma;
+    bool ma_momentum_up = fast_ma > fast_ma_prev && slow_ma > slow_ma_prev;
+    bool ma_momentum_down = fast_ma < fast_ma_prev && slow_ma < slow_ma_prev;
+    
+    // BUY Signal
+    if(ma_bullish && ma_momentum_up && rsi > 45 && rsi < 70)
+    {
+        Print("🔥 SIGNAL BUY - MA: ", DoubleToString(fast_ma, 5), "/", DoubleToString(slow_ma, 5), 
+              " RSI: ", DoubleToString(rsi, 1));
+        return 1;
+    }
+    
+    // SELL Signal
+    if(ma_bearish && ma_momentum_down && rsi < 55 && rsi > 30)
+    {
+        Print("🔥 SIGNAL SELL - MA: ", DoubleToString(fast_ma, 5), "/", DoubleToString(slow_ma, 5), 
+              " RSI: ", DoubleToString(rsi, 1));
+        return -1;
+    }
+    
+    return 0;
+}
+
+//+------------------------------------------------------------------+
+//| MARKET CONDITION CHECK                                         |
+//+------------------------------------------------------------------+
+bool IsMarketSafe()
+{
+    // Spread check
+    long spread = SymbolInfoInteger(TradingSymbol, SYMBOL_SPREAD);
+    if(spread > MaxSpreadPoints)
+    {
+        static datetime lastSpreadMsg = 0;
+        if(TimeCurrent() - lastSpreadMsg > 600)
+        {
+            Print("📊 Spread terlalu tinggi: ", spread, " points");
+            lastSpreadMsg = TimeCurrent();
+        }
+        return false;
+    }
+    
+    // Time filter (GMT+7)
+    MqlDateTime dt;
+    TimeToStruct(TimeCurrent() + 7*3600, dt); // Convert to GMT+7
+    if(dt.hour < StartHour || dt.hour > EndHour)
+    {
+        static datetime lastTimeMsg = 0;
+        if(TimeCurrent() - lastTimeMsg > 3600)
+        {
+            Print("⏰ Di luar jam trading: ", dt.hour, ":00 WIB");
+            lastTimeMsg = TimeCurrent();
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| EXECUTE SAFE TRADE                                             |
+//+------------------------------------------------------------------+
+void ExecuteSafeTrade(ENUM_ORDER_TYPE orderType)
+{
+    if(!AntiRevengeCheck()) return;
+    if(CountMyPositions() > 0) return; // Only 1 position at a time
+    
+    double ask = SymbolInfoDouble(TradingSymbol, SYMBOL_ASK);
+    double bid = SymbolInfoDouble(TradingSymbol, SYMBOL_BID);
+    double price = (orderType == ORDER_TYPE_BUY) ? ask : bid;
+    
+    double lotSize = CalculateSafePositionSize();
+    
+    // Calculate SL/TP
+    double sl, tp;
+    if(orderType == ORDER_TYPE_BUY)
+    {
+        sl = NormalizeDouble(price - StopLossPoints * Point(), Digits());
+        tp = NormalizeDouble(price + TakeProfitPoints * Point(), Digits());
+    }
+    else
+    {
+        sl = NormalizeDouble(price + StopLossPoints * Point(), Digits());
+        tp = NormalizeDouble(price - TakeProfitPoints * Point(), Digits());
+    }
+    
+    string comment = "MDP_EA_v30_" + TimeToString(TimeCurrent(), TIME_MINUTES);
+    
+    Print("🚀 EXECUTING SAFE TRADE:");
+    Print("Type: ", EnumToString(orderType));
+    Print("Size: ", DoubleToString(lotSize, 2), " lot");
+    Print("Price: ", DoubleToString(price, Digits()));
+    Print("SL: ", DoubleToString(sl, Digits()), " (", (int)StopLossPoints, " pts)");
+    Print("TP: ", DoubleToString(tp, Digits()), " (", (int)TakeProfitPoints, " pts)");
+    
+    if(trade.PositionOpen(TradingSymbol, orderType, lotSize, price, sl, tp, comment))
+    {
+        LastTradeTime = TimeCurrent();
+        Print("✅ TRADE OPENED! Ticket: #", trade.ResultOrder());
+    }
+    else
+    {
+        Print("❌ TRADE FAILED! Error: ", trade.ResultRetcode(), " - ", trade.ResultRetcodeDescription());
+    }
+}
+
+//+------------------------------------------------------------------+
+//| TRAILING STOP MANAGEMENT                                       |
+//+------------------------------------------------------------------+
+void ManageTrailing()
+{
+    if(!UseTrailingStop) return;
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(PositionGetSymbol(i) == TradingSymbol && PositionGetInteger(POSITION_MAGIC) == 20250624)
+        {
+            double currentPrice = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? 
+                                SymbolInfoDouble(TradingSymbol, SYMBOL_BID) : 
+                                SymbolInfoDouble(TradingSymbol, SYMBOL_ASK);
+            double currentSL = PositionGetDouble(POSITION_SL);
+            double profit = PositionGetDouble(POSITION_PROFIT);
+            
+            // Trailing hanya untuk profit > $20
+            if(profit > 20)
+            {
+                double newSL = 0;
+                bool shouldUpdate = false;
+                
+                if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+                {
+                    newSL = currentPrice - TrailingDistance * Point();
+                    if(newSL > currentSL + Point() * 10) shouldUpdate = true;
+                }
+                else
+                {
+                    newSL = currentPrice + TrailingDistance * Point();
+                    if(newSL < currentSL - Point() * 10) shouldUpdate = true;
+                }
+                
+                if(shouldUpdate)
+                {
+                    newSL = NormalizeDouble(newSL, Digits());
+                    if(trade.PositionModify(PositionGetInteger(POSITION_TICKET), newSL, PositionGetDouble(POSITION_TP)))
+                    {
+                        Print("📈 Trailing stop updated: ", DoubleToString(newSL, Digits()));
+                    }
+                }
+            }
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| UTILITY FUNCTIONS                                              |
+//+------------------------------------------------------------------+
+int CountMyPositions()
+{
+    int count = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(PositionGetSymbol(i) == TradingSymbol && PositionGetInteger(POSITION_MAGIC) == 20250624)
+            count++;
+    }
+    return count;
+}
+
+void ResetDailyStats()
+{
+    MqlDateTime dt;
+    TimeToStruct(TimeCurrent(), dt);
+    dt.hour = 0; dt.min = 0; dt.sec = 0;
+    DayStartTime = StructToTime(dt);
+    
+    DailyProfit = 0;
+    DailyLoss = 0;
+    DailyTargetReached = false;
+    DailyLossLimitHit = false;
+    ConsecutiveLosses = 0;
+    
+    Print("🌅 RESET DAILY STATS - Target: $", DailyProfitTarget);
+}
+
+void UpdateDailyStats()
+{
+    if(HistorySelect(DayStartTime, TimeCurrent()))
+    {
+        double totalProfit = 0;
+        for(int i = 0; i < HistoryDealsTotal(); i++)
+        {
+            ulong ticket = HistoryDealGetTicket(i);
+            if(HistoryDealGetInteger(ticket, DEAL_MAGIC) == 20250624 &&
+               HistoryDealGetString(ticket, DEAL_SYMBOL) == TradingSymbol)
+            {
+                double dealProfit = HistoryDealGetDouble(ticket, DEAL_PROFIT) +
+                                  HistoryDealGetDouble(ticket, DEAL_SWAP) +
+                                  HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+                totalProfit += dealProfit;
+            }
+        }
+        
+        if(totalProfit >= 0)
+        {
+            DailyProfit = totalProfit;
+            DailyLoss = 0;
+        }
+        else
+        {
+            DailyProfit = 0;
+            DailyLoss = MathAbs(totalProfit);
+        }
+        
+        // Check limits
+        if(DailyProfit >= DailyProfitTarget)
+            DailyTargetReached = true;
+        if(DailyLoss >= DailyLossLimit)
+            DailyLossLimitHit = true;
+    }
+}
+
+void PrintDailyReport()
+{
+    Print("📊 DAILY REPORT:");
+    Print("Target: $", DailyProfitTarget, " | Current: $", DoubleToString(DailyProfit, 2));
+    Print("Max Loss: $", DailyLossLimit, " | Current: $", DoubleToString(DailyLoss, 2));
+    Print("Consecutive Losses: ", ConsecutiveLosses);
+    Print("Active Positions: ", CountMyPositions());
+    
+    if(DailyTargetReached)
+        Print("🎉 TARGET ACHIEVED! Time to rest.");
+    if(DailyLossLimitHit)
+        Print("🛑 LOSS LIMIT HIT! Stop trading for today.");
+    
+    Print("========================");
+}
+
+//+------------------------------------------------------------------+
+//| MAIN TICK FUNCTION                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    static int tickCount = 0;
+    static datetime lastReportTime = 0;
+    tickCount++;
+    
+    // Check for new day
+    MqlDateTime current;
+    TimeToStruct(TimeCurrent(), current);
+    MqlDateTime dayStart;
+    TimeToStruct(DayStartTime, dayStart);
+    
+    if(current.day != dayStart.day)
+        ResetDailyStats();
+    
+    // Update daily stats
+    UpdateDailyStats();
+    
+    // Print report every 30 minutes
+    if(TimeCurrent() - lastReportTime >= 1800)
+    {
+        PrintDailyReport();
+        lastReportTime = TimeCurrent();
+    }
+    
+    // Manage trailing stops
+    ManageTrailing();
+    
+    // Check for new signals (every 10 ticks for performance)
+    if(tickCount % 10 != 0) return;
+    
+    if(!AntiRevengeCheck()) return;
+    if(!IsMarketSafe()) return;
+    if(CountMyPositions() > 0) return;
+    
+    int signal = GetSmartSignal();
+    
+    if(signal == 1)
+    {
+        ExecuteSafeTrade(ORDER_TYPE_BUY);
+    }
+    else if(signal == -1)
+    {
+        ExecuteSafeTrade(ORDER_TYPE_SELL);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| TRADE RESULT TRACKING                                          |
+//+------------------------------------------------------------------+
+void OnTrade()
+{
+    UpdateDailyStats();
+    
+    // Track consecutive losses
+    if(HistoryDealsTotal() > 0)
+    {
+        ulong lastTicket = HistoryDealGetTicket(HistoryDealsTotal() - 1);
+        if(HistoryDealGetInteger(lastTicket, DEAL_MAGIC) == 20250624)
+        {
+            double lastProfit = HistoryDealGetDouble(lastTicket, DEAL_PROFIT);
+            
+            if(lastProfit < 0)
+            {
+                ConsecutiveLosses++;
+                Print("❌ LOSS #", ConsecutiveLosses, " - Amount: $", DoubleToString(lastProfit, 2));
+                
+                if(ConsecutiveLosses >= MaxConsecutiveLosses)
+                {
+                    Print("🛑 MAXIMUM CONSECUTIVE LOSSES REACHED!");
+                    Print("💡 Sistem akan cooldown. Evaluasi market condition!");
+                }
+            }
+            else
+            {
+                ConsecutiveLosses = 0;
+                Print("✅ PROFIT: $", DoubleToString(lastProfit, 2));
+            }
+        }
+    }
+    
+    Print("💰 Daily P&L: +$", DoubleToString(DailyProfit, 2), " / -$", DoubleToString(DailyLoss, 2));
+}
+
+//+------------------------------------------------------------------+
+//| CLEANUP                                                         |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    Print("🛑 MDP EA v30.0 - Shutting down");
+    Print("📊 Final Daily Stats:");
+    Print("Profit: $", DoubleToString(DailyProfit, 2));
+    Print("Loss: $", DoubleToString(DailyLoss, 2));
+    Print("Target Reached: ", DailyTargetReached ? "YES" : "NO");
+}
