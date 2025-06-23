@@ -1,53 +1,58 @@
 //+------------------------------------------------------------------+
-//|                                    EA XAUUSD Smart v4.0         |
-//|                          Upgraded with Strategic Improvements    |
-//|                                        Copyright 2025, YourName |
+//|                                EA XAUUSD Smart v4.1 - FIXED     |
+//|                        RCA Issues Resolved - Better R:R Ratio    |
+//|                                        Copyright 2025, Fixed Ver |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025"
+#property copyright "Copyright 2025 - RCA Fixed"
 #property link      ""
-#property version   "4.00"
+#property version   "4.10"
 #property strict
 
-//--- 🎯 PHASE 1 CRITICAL IMPROVEMENTS
-//--- ATR-based SL/TP, Adaptive Cooldown, Smart Break-even, Dynamic Spread
+//--- 🎯 FIXED: Better Risk:Reward, Simplified Management, Quality Signals
 
 //+------------------------------------------------------------------+
-//| Input Parameters - Smart Configuration                           |
+//| Input Parameters - Optimized Configuration                       |
 //+------------------------------------------------------------------+
 input group "=== 🚀 CORE SETTINGS ==="
-input double MaxRiskPerTrade = 1.5;        // Risk per trade (%)
+input double MaxRiskPerTrade = 1.0;        // Risk per trade (%) - REDUCED from 1.5
 input double BaseLotSize = 0.01;            // Base lot size
 input bool   UseAggressiveMode = false;     // 2x Risk Mode
 input int    MagicNumber = 12345;
 
 input group "=== 🛡️ ANTI-REVENGE SYSTEM ==="
-input int    MinCooldownMinutes = 15;       // Min cooldown after loss (minutes)
-input int    MaxCooldownMinutes = 120;      // Max cooldown after loss (minutes)
-input int    MaxConsecutiveLosses = 2;      // Max losses before lot reduction
+input int    MinCooldownMinutes = 30;       // INCREASED from 15 - More patience
+input int    MaxCooldownMinutes = 180;      // INCREASED from 120 - Better cooling
+input int    MaxConsecutiveLosses = 3;      // INCREASED from 2 - More tolerance
 
-input group "=== 🎯 ATR-BASED RISK MANAGEMENT ==="
+input group "=== 🎯 IMPROVED RISK MANAGEMENT ==="
 input int    ATR_Period = 14;               // ATR calculation period
-input double ATR_SL_Multiplier = 2.0;       // SL = ATR × this multiplier
-input double ATR_TP_Multiplier = 4.0;       // TP = ATR × this multiplier
-input double ATR_Trail_Multiplier = 1.2;    // Trailing distance multiplier
+input double ATR_SL_Multiplier = 1.8;       // REDUCED from 2.0 - Tighter SL
+input double ATR_TP_Multiplier = 5.4;       // INCREASED from 4.0 - Better R:R (1:3)
+input double ATR_Trail_Multiplier = 2.5;    // INCREASED from 1.2 - Less aggressive trailing
 
-input group "=== 📊 MARKET CONDITIONS ==="
-input double MaxSpreadATRMultiplier = 2.5;  // Max spread = ATR × this
+input group "=== 📊 STRICTER MARKET CONDITIONS ==="
+input double MaxSpreadATRMultiplier = 1.8;  // REDUCED from 2.5 - Stricter spread
 input bool   UseSessionOptimization = true; // Optimize per trading session
 input bool   AvoidHighVolatility = true;    // Skip when ATR > 150% average
 
-input group "=== 🎮 SIGNAL SYSTEM ==="
-input int    SignalMinStrength = 3;         // Min signal strength (1-5)
+input group "=== 🎮 ENHANCED SIGNAL SYSTEM ==="
+input int    SignalMinStrength = 4;         // INCREASED from 3 - Better quality
 input bool   UseMultiTimeframe = true;      // M15 entry + H1 confirmation
-input double ADX_TrendMinimum = 25.0;       // Min ADX for trend trading
+input double ADX_TrendMinimum = 30.0;       // INCREASED from 25.0 - Stronger trends only
 
-input group "=== 💰 POSITION SIZING ==="
+input group "=== 💰 CONSERVATIVE POSITION SIZING ==="
 input bool   UseEquityCurveMultiplier = true; // Adjust lot based on performance
-input double PerformanceBonus = 0.25;       // Lot increase when winning (25%)
-input double PerformancePenalty = 0.50;     // Lot decrease when losing (50%)
+input double PerformanceBonus = 0.15;       // REDUCED from 0.25 - Less aggressive
+input double PerformancePenalty = 0.30;     // REDUCED from 0.50 - Less punishment
+
+input group "=== 🔧 SIMPLIFIED MANAGEMENT ==="
+input bool   UseBreakEven = false;          // DISABLED - Causes premature exits
+input bool   UsePartialExit = false;        // DISABLED - Reduces profit potential
+input bool   UseTimeBasedExit = false;      // DISABLED unless trend clearly over
+input int    MaxTradeHours = 24;            // INCREASED from 8 - Let winners run
 
 //+------------------------------------------------------------------+
-//| Global Variables - Smart Memory                                  |
+//| Global Variables - Cleaner Memory                                |
 //+------------------------------------------------------------------+
 datetime lastTradeTime = 0;
 datetime cooldownEndTime = 0;
@@ -59,6 +64,8 @@ double atrAverage = 0;
 bool isInCooldown = false;
 int totalTrades = 0;
 int winningTrades = 0;
+double totalProfit = 0;
+double totalLoss = 0;
 
 // Session tracking
 bool isEUSession = false;
@@ -66,27 +73,41 @@ bool isUSSession = false;
 bool isAsiaSession = false;
 bool isPrimeTime = false;
 
-// Smart break-even tracking
-bool breakEvenMoved = false;
-double breakEvenPrice = 0;
+// Simplified tracking - NO MORE COMPLEX BREAK-EVEN LOGIC
+struct TradeInfo {
+    int ticket;
+    datetime openTime;
+    double openPrice;
+    bool trailingActive;
+};
+TradeInfo activeTradeInfo;
 
 //+------------------------------------------------------------------+
-//| Expert initialization - Smart Setup                              |
+//| Expert initialization - Clean Setup                              |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    Print("🚀 EA XAUUSD Smart v4.0 - Tesla Autopilot Mode Activated!");
+    Print("🚀 EA XAUUSD Smart v4.1 - RCA FIXED - Sniper Mode Activated!");
+    Print("🎯 Key Improvements:");
+    Print("   - Better Risk:Reward Ratio (1:3)");
+    Print("   - Simplified Position Management");
+    Print("   - Stricter Signal Quality");
+    Print("   - Reduced Over-Management");
     
     // Initialize performance tracking
     lastEquity = AccountEquity();
     
-    // Calculate initial ATR average (100 periods for stability)
+    // Calculate initial ATR average (200 periods for better stability)
     double atrSum = 0;
-    for(int i = 1; i <= 100; i++)
+    for(int i = 1; i <= 200; i++)
     {
         atrSum += iATR(Symbol(), PERIOD_M15, ATR_Period, i);
     }
-    atrAverage = atrSum / 100.0;
+    atrAverage = atrSum / 200.0;
+    
+    // Initialize active trade info
+    activeTradeInfo.ticket = 0;
+    activeTradeInfo.trailingActive = false;
     
     Print("📊 ATR Average initialized: ", DoubleToStr(atrAverage, 5));
     Print("💰 Account Equity: $", DoubleToStr(AccountEquity(), 2));
@@ -95,7 +116,7 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function - Smart Brain                               |
+//| Expert tick function - Focused Brain                             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
@@ -104,79 +125,80 @@ void OnTick()
     UpdateSessionData();
     UpdatePerformanceData();
     
-    // Smart position management for existing trades
-    ManageExistingPositions();
+    // SIMPLIFIED position management
+    ManagePositionsSimple();
     
-    // Check if we can trade (multiple intelligent filters)
+    // Check if we can trade (stricter filters)
     if(!CanTradeNow()) return;
     
-    // Generate and evaluate signals
-    int signalStrength = AnalyzeMarket();
+    // Generate and evaluate signals (higher quality threshold)
+    int signalStrength = AnalyzeMarketStrict();
     
     if(signalStrength >= SignalMinStrength)
     {
-        // Execute smart trade with all improvements
-        ExecuteSmartTrade(signalStrength);
+        // Execute trade with improved risk management
+        ExecuteQualityTrade(signalStrength);
     }
 }
 
 //+------------------------------------------------------------------+
-//| Update Market Data - Market Intelligence                         |
+//| Update Market Data - Same as before                              |
 //+------------------------------------------------------------------+
 void UpdateMarketData()
 {
-    // Current ATR for dynamic adjustments
     atrCurrent = iATR(Symbol(), PERIOD_M15, ATR_Period, 1);
     
-    // Update ATR average (simple moving average of last 50 values)
-    static double atrBuffer[50];
+    // Update ATR average (rolling 100 periods)
+    static double atrBuffer[100];
     static int atrIndex = 0;
     
     atrBuffer[atrIndex] = atrCurrent;
-    atrIndex = (atrIndex + 1) % 50;
+    atrIndex = (atrIndex + 1) % 100;
     
     double atrSum = 0;
-    for(int i = 0; i < 50; i++)
+    for(int i = 0; i < 100; i++)
     {
         atrSum += atrBuffer[i];
     }
-    atrAverage = atrSum / 50.0;
+    atrAverage = atrSum / 100.0;
 }
 
 //+------------------------------------------------------------------+
-//| Update Session Data - Timing Intelligence                        |
+//| Update Session Data - Same as before                             |
 //+------------------------------------------------------------------+
 void UpdateSessionData()
 {
     int currentHour = Hour();
     
-    // WIB timezone sessions
-    isAsiaSession = (currentHour >= 9 && currentHour <= 11);   // Tokyo breakouts
-    isEUSession = (currentHour >= 15 && currentHour <= 18);    // EU prime
-    isUSSession = (currentHour >= 21 && currentHour <= 24);    // US momentum
-    isPrimeTime = isEUSession || isUSSession;                  // Best volatility
+    isAsiaSession = (currentHour >= 9 && currentHour <= 11);
+    isEUSession = (currentHour >= 15 && currentHour <= 18);
+    isUSSession = (currentHour >= 21 && currentHour <= 24);
+    isPrimeTime = isEUSession || isUSSession;
 }
 
 //+------------------------------------------------------------------+
-//| Update Performance Data - Performance Intelligence               |
+//| Update Performance Data - Enhanced Tracking                      |
 //+------------------------------------------------------------------+
 void UpdatePerformanceData()
 {
     if(!UseEquityCurveMultiplier) return;
     
     double currentEquity = AccountEquity();
-    double equityChange = currentEquity - lastEquity;
     
-    // Update performance multiplier based on recent performance
-    if(totalTrades >= 10) // Need minimum trades for statistical significance
+    // Calculate real performance metrics
+    if(totalTrades >= 5) // Minimum trades for adjustment
     {
         double winRate = (double)winningTrades / totalTrades;
+        double avgWin = (winningTrades > 0) ? totalProfit / winningTrades : 0;
+        double avgLoss = (totalTrades - winningTrades > 0) ? totalLoss / (totalTrades - winningTrades) : 0;
+        double profitFactor = (avgLoss > 0) ? avgWin / avgLoss : 1.0;
         
-        if(winRate > 0.70) // Excellent performance
+        // Adjust based on REAL performance, not just win rate
+        if(profitFactor > 1.5 && winRate > 0.50) // Excellent performance
         {
             performanceMultiplier = 1.0 + PerformanceBonus;
         }
-        else if(winRate < 0.40) // Poor performance
+        else if(profitFactor < 0.8 || winRate < 0.35) // Poor performance
         {
             performanceMultiplier = 1.0 - PerformancePenalty;
         }
@@ -184,17 +206,23 @@ void UpdatePerformanceData()
         {
             performanceMultiplier = 1.0;
         }
+        
+        // Debug info
+        if(totalTrades % 10 == 0) // Every 10 trades
+        {
+            Print("📊 Performance: WR=", DoubleToStr(winRate*100, 1), "% | PF=", DoubleToStr(profitFactor, 2), " | Mult=", DoubleToStr(performanceMultiplier, 2));
+        }
     }
     
     lastEquity = currentEquity;
 }
 
 //+------------------------------------------------------------------+
-//| Check Trading Conditions - Multiple Smart Filters               |
+//| STRICTER Trading Conditions - Quality over Quantity              |
 //+------------------------------------------------------------------+
 bool CanTradeNow()
 {
-    // 1. Check if in cooldown (adaptive system)
+    // 1. Cooldown check (longer cooldown)
     if(TimeCurrent() < cooldownEndTime)
     {
         isInCooldown = true;
@@ -202,112 +230,130 @@ bool CanTradeNow()
     }
     isInCooldown = false;
     
-    // 2. Dynamic spread filter (ATR-based)
+    // 2. STRICTER spread filter
     double maxAllowedSpread = atrCurrent * MaxSpreadATRMultiplier;
-    if(MarketInfo(Symbol(), MODE_SPREAD) * Point > maxAllowedSpread)
+    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD) * Point;
+    if(currentSpread > maxAllowedSpread)
     {
         return false;
     }
     
-    // 3. High volatility filter (avoid chaos)
-    if(AvoidHighVolatility && atrCurrent > atrAverage * 1.5)
+    // 3. Enhanced volatility filter
+    if(AvoidHighVolatility && atrCurrent > atrAverage * 1.3) // STRICTER: 1.3 instead of 1.5
     {
         return false;
     }
     
-    // 4. Session optimization
-    if(UseSessionOptimization && !isPrimeTime && !isAsiaSession)
+    // 4. MANDATORY session optimization
+    if(!isPrimeTime && !isAsiaSession)
     {
-        return false; // Only trade during optimal sessions
+        return false; // NO TRADING outside optimal sessions
     }
     
-    // 5. Weekend protection
-    if(DayOfWeek() == 5 && Hour() >= 21) // Friday 21:00 WIB
+    // 5. Enhanced weekend protection
+    if(DayOfWeek() == 5 && Hour() >= 20) // Earlier cutoff
     {
         return false;
     }
     
-    // 6. Check if already have open position
+    // 6. Monday morning protection
+    if(DayOfWeek() == 1 && Hour() < 10) // Avoid Monday gaps
+    {
+        return false;
+    }
+    
+    // 7. ONE POSITION ONLY - No aggressive mode complications
     if(CountOpenPositions() > 0)
     {
-        // Allow second position only in aggressive mode with strong trend
-        if(!UseAggressiveMode) return false;
-        
-        double adx = iADX(Symbol(), PERIOD_H1, 14, PRICE_CLOSE, MODE_MAIN, 1);
-        if(adx < ADX_TrendMinimum * 1.5) return false; // Extra strong trend required
+        return false; // Keep it simple
+    }
+    
+    // 8. Minimum time between trades (prevent overtrading)
+    if(TimeCurrent() - lastTradeTime < 1800) // 30 minutes minimum
+    {
+        return false;
     }
     
     return true;
 }
 
 //+------------------------------------------------------------------+
-//| Analyze Market - Signal Intelligence                             |
+//| ENHANCED Market Analysis - Higher Quality Signals                |
 //+------------------------------------------------------------------+
-int AnalyzeMarket()
+int AnalyzeMarketStrict()
 {
     int signalStrength = 0;
-    int direction = 0; // 1 = Buy, -1 = Sell
+    int direction = 0;
     
-    // 1. Multi-timeframe analysis
-    if(UseMultiTimeframe)
+    // 1. ENHANCED Multi-timeframe analysis
+    double ma20_m15 = iMA(Symbol(), PERIOD_M15, 20, 0, MODE_SMA, PRICE_CLOSE, 1);
+    double ma50_m15 = iMA(Symbol(), PERIOD_M15, 50, 0, MODE_SMA, PRICE_CLOSE, 1);
+    double ma200_m15 = iMA(Symbol(), PERIOD_M15, 200, 0, MODE_SMA, PRICE_CLOSE, 1);
+    
+    double ma20_h1 = iMA(Symbol(), PERIOD_H1, 20, 0, MODE_SMA, PRICE_CLOSE, 1);
+    double ma50_h1 = iMA(Symbol(), PERIOD_H1, 50, 0, MODE_SMA, PRICE_CLOSE, 1);
+    
+    // STRICTER trend alignment - ALL timeframes must agree
+    bool strongUpTrend = (ma20_m15 > ma50_m15) && (ma50_m15 > ma200_m15) && (ma20_h1 > ma50_h1);
+    bool strongDownTrend = (ma20_m15 < ma50_m15) && (ma50_m15 < ma200_m15) && (ma20_h1 < ma50_h1);
+    
+    if(strongUpTrend)
     {
-        // M15 for entry signals
-        double ma20_m15 = iMA(Symbol(), PERIOD_M15, 20, 0, MODE_SMA, PRICE_CLOSE, 1);
-        double ma50_m15 = iMA(Symbol(), PERIOD_M15, 50, 0, MODE_SMA, PRICE_CLOSE, 1);
-        
-        // H1 for trend confirmation
-        double ma20_h1 = iMA(Symbol(), PERIOD_H1, 20, 0, MODE_SMA, PRICE_CLOSE, 1);
-        double ma50_h1 = iMA(Symbol(), PERIOD_H1, 50, 0, MODE_SMA, PRICE_CLOSE, 1);
-        
-        // Trend alignment check
-        bool upTrendM15 = ma20_m15 > ma50_m15;
-        bool upTrendH1 = ma20_h1 > ma50_h1;
-        
-        if(upTrendM15 && upTrendH1)
-        {
-            direction = 1;
-            signalStrength += 2;
-        }
-        else if(!upTrendM15 && !upTrendH1)
-        {
-            direction = -1;
-            signalStrength += 2;
-        }
+        direction = 1;
+        signalStrength += 3; // Higher weight for perfect alignment
+    }
+    else if(strongDownTrend)
+    {
+        direction = -1;
+        signalStrength += 3;
+    }
+    else
+    {
+        return 0; // NO MIXED SIGNALS - Too risky
     }
     
-    // 2. ADX trend strength
+    // 2. STRONGER ADX requirement
     double adx = iADX(Symbol(), PERIOD_M15, 14, PRICE_CLOSE, MODE_MAIN, 1);
     if(adx > ADX_TrendMinimum)
     {
         signalStrength += 1;
+        if(adx > ADX_TrendMinimum * 1.5) // Extra strong trend
+        {
+            signalStrength += 1;
+        }
+    }
+    else
+    {
+        return 0; // NO WEAK TRENDS
     }
     
-    // 3. Price action patterns (simple)
-    double open1 = iOpen(Symbol(), PERIOD_M15, 1);
+    // 3. ENHANCED Price action confirmation
     double close1 = iClose(Symbol(), PERIOD_M15, 1);
-    double high1 = iHigh(Symbol(), PERIOD_M15, 1);
-    double low1 = iLow(Symbol(), PERIOD_M15, 1);
-    
-    // Engulfing pattern detection
-    double open2 = iOpen(Symbol(), PERIOD_M15, 2);
     double close2 = iClose(Symbol(), PERIOD_M15, 2);
+    double close3 = iClose(Symbol(), PERIOD_M15, 3);
     
-    if(close1 > open1 && close2 < open2 && close1 > open2 && open1 < close2) // Bullish engulfing
+    // Momentum confirmation - 3 consecutive candles
+    if(direction == 1 && close1 > close2 && close2 > close3)
     {
-        if(direction == 1) signalStrength += 1;
+        signalStrength += 1;
     }
-    else if(close1 < open1 && close2 > open2 && close1 < open2 && open1 > close2) // Bearish engulfing
+    else if(direction == -1 && close1 < close2 && close2 < close3)
     {
-        if(direction == -1) signalStrength += 1;
-    }
-    
-    // 4. Session-based signal adjustment
-    if(isPrimeTime)
-    {
-        signalStrength += 1; // Higher confidence during prime hours
+        signalStrength += 1;
     }
     
-    // Store direction for trade execution
+    // 4. RSI confirmation (avoid overbought/oversold)
+    double rsi = iRSI(Symbol(), PERIOD_M15, 14, PRICE_CLOSE, 1);
+    if(direction == 1 && rsi > 30 && rsi < 70) // Buy in neutral zone
+    {
+        signalStrength += 1;
+    }
+    else if(direction == -1 && rsi > 30 && rsi < 70) // Sell in neutral zone
+    {
+        signalStrength += 1;
+    }
+    
+    // Store direction
     if(direction != 0)
     {
         GlobalVariableSet("SignalDirection", direction);
@@ -317,19 +363,19 @@ int AnalyzeMarket()
 }
 
 //+------------------------------------------------------------------+
-//| Execute Smart Trade - Intelligent Execution                      |
+//| Execute Quality Trade - Better Risk Management                   |
 //+------------------------------------------------------------------+
-void ExecuteSmartTrade(int signalStrength)
+void ExecuteQualityTrade(int signalStrength)
 {
     int direction = (int)GlobalVariableGet("SignalDirection");
     if(direction == 0) return;
     
-    // Calculate smart position size
-    double lotSize = CalculateSmartLotSize();
+    // Calculate conservative position size
+    double lotSize = CalculateConservativeLotSize();
     
-    // Calculate ATR-based SL and TP
+    // IMPROVED ATR-based SL and TP
     double slDistance = atrCurrent * ATR_SL_Multiplier;
-    double tpDistance = atrCurrent * ATR_TP_Multiplier;
+    double tpDistance = atrCurrent * ATR_TP_Multiplier; // Now 1:3 ratio
     
     double price = (direction == 1) ? Ask : Bid;
     double stopLoss = (direction == 1) ? price - slDistance : price + slDistance;
@@ -341,10 +387,10 @@ void ExecuteSmartTrade(int signalStrength)
         (direction == 1) ? OP_BUY : OP_SELL,
         lotSize,
         price,
-        3, // slippage
+        3,
         stopLoss,
         takeProfit,
-        "XAUUSD Smart v4.0 - S:" + IntegerToString(signalStrength),
+        "XAUUSD v4.1 FIXED - S:" + IntegerToString(signalStrength) + " R:R=1:3",
         MagicNumber,
         0,
         (direction == 1) ? clrBlue : clrRed
@@ -352,13 +398,19 @@ void ExecuteSmartTrade(int signalStrength)
     
     if(ticket > 0)
     {
-        Print("✅ Smart Trade Executed - Ticket: ", ticket, 
+        // Store trade info for simplified management
+        activeTradeInfo.ticket = ticket;
+        activeTradeInfo.openTime = TimeCurrent();
+        activeTradeInfo.openPrice = price;
+        activeTradeInfo.trailingActive = false;
+        
+        Print("✅ QUALITY Trade Executed - Ticket: ", ticket, 
               " | Direction: ", (direction == 1) ? "BUY" : "SELL",
               " | Lot: ", DoubleToStr(lotSize, 2),
-              " | Signal Strength: ", signalStrength);
+              " | Signal Strength: ", signalStrength,
+              " | R:R Ratio: 1:3");
         
         lastTradeTime = TimeCurrent();
-        breakEvenMoved = false; // Reset break-even flag
         totalTrades++;
     }
     else
@@ -368,48 +420,27 @@ void ExecuteSmartTrade(int signalStrength)
 }
 
 //+------------------------------------------------------------------+
-//| Calculate Smart Lot Size - Dynamic Position Sizing              |
+//| Calculate Conservative Lot Size                                  |
 //+------------------------------------------------------------------+
-double CalculateSmartLotSize()
+double CalculateConservativeLotSize()
 {
-    double lotSize = BaseLotSize;
-    
-    // 1. Account scaling
     double equity = AccountEquity();
-    if(equity >= 5000) lotSize = 0.05;
-    else if(equity >= 1000) lotSize = 0.02;
-    else lotSize = 0.01;
-    
-    // 2. Performance multiplier
-    lotSize *= performanceMultiplier;
-    
-    // 3. Consecutive losses adjustment
-    if(consecutiveLosses >= MaxConsecutiveLosses)
-    {
-        lotSize *= 0.5; // Reduce by 50%
-    }
-    
-    // 4. Volatility adjustment
-    double volAdjustment = atrAverage / atrCurrent;
-    if(volAdjustment > 2.0) volAdjustment = 2.0; // Cap at 2x
-    if(volAdjustment < 0.5) volAdjustment = 0.5; // Floor at 0.5x
-    lotSize *= volAdjustment;
-    
-    // 5. Aggressive mode
-    if(UseAggressiveMode)
-    {
-        lotSize *= 2.0;
-    }
-    
-    // 6. Risk-based sizing
     double riskAmount = equity * (MaxRiskPerTrade / 100.0);
     double slDistance = atrCurrent * ATR_SL_Multiplier;
-    double riskBasedLot = riskAmount / (slDistance / Point * MarketInfo(Symbol(), MODE_TICKVALUE));
     
-    // Use the smaller of calculated lot or risk-based lot
-    if(riskBasedLot < lotSize) lotSize = riskBasedLot;
+    // Risk-based calculation
+    double lotSize = riskAmount / (slDistance / Point * MarketInfo(Symbol(), MODE_TICKVALUE));
     
-    // Normalize lot size
+    // Performance adjustment (conservative)
+    lotSize *= performanceMultiplier;
+    
+    // Consecutive losses protection
+    if(consecutiveLosses >= 2)
+    {
+        lotSize *= 0.7; // Reduce by 30%
+    }
+    
+    // Normalize
     double minLot = MarketInfo(Symbol(), MODE_MINLOT);
     double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
     double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
@@ -420,69 +451,63 @@ double CalculateSmartLotSize()
 }
 
 //+------------------------------------------------------------------+
-//| Manage Existing Positions - Profit Protection                    |
+//| SIMPLIFIED Position Management - Let Winners Run                 |
 //+------------------------------------------------------------------+
-void ManageExistingPositions()
+void ManagePositionsSimple()
 {
-    for(int i = OrdersTotal() - 1; i >= 0; i--)
+    if(activeTradeInfo.ticket == 0) return;
+    
+    // Check if trade still exists
+    if(!OrderSelect(activeTradeInfo.ticket, SELECT_BY_TICKET, MODE_TRADES))
     {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol() || OrderMagicNumber() != MagicNumber) continue;
+        activeTradeInfo.ticket = 0; // Trade closed
+        return;
+    }
+    
+    double currentPrice = (OrderType() == OP_BUY) ? Bid : Ask;
+    double openPrice = OrderOpenPrice();
+    double profit = (OrderType() == OP_BUY) ? (currentPrice - openPrice) : (openPrice - currentPrice);
+    double profitPips = profit / Point;
+    
+    // ONLY trailing stop - NO break-even, NO partial exits
+    if(profitPips >= 50 && !activeTradeInfo.trailingActive) // Activate trailing after 50 pips
+    {
+        activeTradeInfo.trailingActive = true;
+        Print("🔄 Trailing Stop Activated at +", DoubleToStr(profitPips, 1), " pips");
+    }
+    
+    if(activeTradeInfo.trailingActive)
+    {
+        double trailDistance = atrCurrent * ATR_Trail_Multiplier;
+        double newSL = (OrderType() == OP_BUY) ? 
+                      currentPrice - trailDistance : 
+                      currentPrice + trailDistance;
         
-        double currentPrice = (OrderType() == OP_BUY) ? Bid : Ask;
-        double openPrice = OrderOpenPrice();
-        double profit = (OrderType() == OP_BUY) ? (currentPrice - openPrice) : (openPrice - currentPrice);
-        double profitPips = profit / Point;
+        // Only move SL in favorable direction
+        bool shouldUpdate = false;
+        if(OrderType() == OP_BUY && newSL > OrderStopLoss() + 10*Point)
+            shouldUpdate = true;
+        else if(OrderType() == OP_SELL && newSL < OrderStopLoss() - 10*Point)
+            shouldUpdate = true;
         
-        // Smart Break-Even
-        if(!breakEvenMoved && profitPips >= 25)
+        if(shouldUpdate)
         {
-            double newSL = openPrice + ((OrderType() == OP_BUY) ? MarketInfo(Symbol(), MODE_SPREAD) * Point : -MarketInfo(Symbol(), MODE_SPREAD) * Point);
-            
-            if(OrderModify(OrderTicket(), OrderOpenPrice(), newSL, OrderTakeProfit(), 0, clrYellow))
+            if(OrderModify(activeTradeInfo.ticket, OrderOpenPrice(), newSL, OrderTakeProfit(), 0, clrGreen))
             {
-                breakEvenMoved = true;
-                Print("🛡️ Break-Even activated for ticket: ", OrderTicket());
+                Print("📈 Trail Updated: SL moved to ", DoubleToStr(newSL, 5));
             }
         }
-        
-        // ATR-based Trailing Stop
-        if(breakEvenMoved && profitPips >= 40)
+    }
+    
+    // Optional time-based exit (only if enabled and trend reversal detected)
+    if(UseTimeBasedExit && TimeCurrent() - activeTradeInfo.openTime > MaxTradeHours * 3600)
+    {
+        // Check if trend still valid before closing
+        double adx = iADX(Symbol(), PERIOD_M15, 14, PRICE_CLOSE, MODE_MAIN, 1);
+        if(adx < ADX_TrendMinimum * 0.7) // Trend weakening
         {
-            double trailDistance = atrCurrent * ATR_Trail_Multiplier;
-            double newSL = (OrderType() == OP_BUY) ? 
-                          currentPrice - trailDistance : 
-                          currentPrice + trailDistance;
-            
-            // Only move SL in favorable direction
-            bool shouldUpdate = false;
-            if(OrderType() == OP_BUY && newSL > OrderStopLoss())
-                shouldUpdate = true;
-            else if(OrderType() == OP_SELL && newSL < OrderStopLoss())
-                shouldUpdate = true;
-            
-            if(shouldUpdate)
-            {
-                OrderModify(OrderTicket(), OrderOpenPrice(), newSL, OrderTakeProfit(), 0, clrGreen);
-            }
-        }
-        
-        // Partial Exits
-        if(profitPips >= 60 && OrderLots() > MarketInfo(Symbol(), MODE_MINLOT))
-        {
-            double closeLots = OrderLots() * 0.5; // Close 50%
-            if(closeLots >= MarketInfo(Symbol(), MODE_MINLOT))
-            {
-                OrderClose(OrderTicket(), closeLots, currentPrice, 3, clrOrange);
-                Print("💰 Partial exit: 50% closed at +", DoubleToStr(profitPips, 1), " pips");
-            }
-        }
-        
-        // Time-based exit (8 hours maximum)
-        if(TimeCurrent() - OrderOpenTime() > 8 * 3600)
-        {
-            OrderClose(OrderTicket(), OrderLots(), currentPrice, 3, clrPurple);
-            Print("⏰ Time-based exit: Trade closed after 8 hours");
+            OrderClose(activeTradeInfo.ticket, OrderLots(), currentPrice, 3, clrPurple);
+            Print("⏰ Time-based exit: Trend weakened after ", MaxTradeHours, " hours");
         }
     }
 }
@@ -505,17 +530,15 @@ int CountOpenPositions()
 }
 
 //+------------------------------------------------------------------+
-//| Handle Trade Closure - Learning System                           |
+//| Handle Trade Closure - Enhanced Learning                         |
 //+------------------------------------------------------------------+
 void OnTrade()
 {
-    // Check for recently closed trades
     int totalHistoryNow = OrdersHistoryTotal();
     static int lastHistoryTotal = 0;
     
     if(totalHistoryNow > lastHistoryTotal)
     {
-        // New trade closed, analyze result
         if(OrderSelect(totalHistoryNow - 1, SELECT_BY_POS, MODE_HISTORY))
         {
             if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
@@ -527,34 +550,44 @@ void OnTrade()
                     // Winning trade
                     consecutiveLosses = 0;
                     winningTrades++;
-                    Print("🎉 Win: +$", DoubleToStr(profit, 2));
+                    totalProfit += profit;
+                    Print("🎉 WIN: +$", DoubleToStr(profit, 2), " | Consecutive losses reset");
                 }
                 else
                 {
-                    // Losing trade - activate adaptive cooldown
+                    // Losing trade
                     consecutiveLosses++;
+                    totalLoss += MathAbs(profit);
                     
-                    // Calculate adaptive cooldown based on volatility
+                    // ENHANCED adaptive cooldown
                     int cooldownMinutes = MinCooldownMinutes;
-                    if(atrCurrent < atrAverage * 0.8) // Low volatility = longer cooldown
+                    
+                    // Longer cooldown for multiple losses
+                    if(consecutiveLosses >= 2)
                     {
                         cooldownMinutes = MaxCooldownMinutes;
                     }
-                    else if(atrCurrent > atrAverage * 1.2) // High volatility = shorter cooldown
+                    // Shorter cooldown in high volatility (opportunities)
+                    else if(atrCurrent > atrAverage * 1.2)
                     {
                         cooldownMinutes = MinCooldownMinutes;
                     }
-                    else // Normal volatility
+                    // Normal cooldown
+                    else
                     {
                         cooldownMinutes = (MinCooldownMinutes + MaxCooldownMinutes) / 2;
                     }
                     
                     cooldownEndTime = TimeCurrent() + cooldownMinutes * 60;
                     
-                    Print("📉 Loss: -$", DoubleToStr(MathAbs(profit), 2), 
+                    Print("📉 LOSS: -$", DoubleToStr(MathAbs(profit), 2), 
                           " | Cooldown: ", cooldownMinutes, " min",
                           " | Consecutive losses: ", consecutiveLosses);
                 }
+                
+                // Reset active trade info
+                activeTradeInfo.ticket = 0;
+                activeTradeInfo.trailingActive = false;
             }
         }
     }
@@ -563,19 +596,39 @@ void OnTrade()
 }
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization - Final Report                           |
+//| Expert deinitialization - Enhanced Report                        |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    Print("🏁 EA XAUUSD Smart v4.0 - Session Summary:");
+    Print("🏁 EA XAUUSD Smart v4.1 - FIXED VERSION - Session Summary:");
     Print("📊 Total Trades: ", totalTrades);
+    
     if(totalTrades > 0)
     {
-        Print("🎯 Win Rate: ", DoubleToStr((double)winningTrades/totalTrades*100, 1), "%");
+        double winRate = (double)winningTrades / totalTrades * 100;
+        Print("🎯 Win Rate: ", DoubleToStr(winRate, 1), "%");
+        
+        if(winningTrades > 0 && (totalTrades - winningTrades) > 0)
+        {
+            double avgWin = totalProfit / winningTrades;
+            double avgLoss = totalLoss / (totalTrades - winningTrades);
+            double profitFactor = avgWin / avgLoss;
+            
+            Print("💰 Average Win: $", DoubleToStr(avgWin, 2));
+            Print("📉 Average Loss: $", DoubleToStr(avgLoss, 2));
+            Print("⚖️ Profit Factor: ", DoubleToStr(profitFactor, 2));
+            Print("🎯 Expected R:R: 1:3 (Target)");
+        }
     }
+    
     Print("💰 Final Equity: $", DoubleToStr(AccountEquity(), 2));
     Print("🚀 Performance Multiplier: ", DoubleToStr(performanceMultiplier, 2));
-    Print("Thanks for using EA XAUUSD Smart v4.0 - Tesla Autopilot Trading!");
+    Print("🔧 Key Fixes Applied:");
+    Print("   ✅ Better Risk:Reward (1:3)");
+    Print("   ✅ Simplified Management");
+    Print("   ✅ Stricter Signal Quality");
+    Print("   ✅ Reduced Over-Management");
+    Print("Thanks for using EA XAUUSD Smart v4.1 - FIXED!");
 }
 
 //+------------------------------------------------------------------+
